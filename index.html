@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Náš camping deník</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: #f6f5f1; color: #2b2b28;
+  }
+  header {
+    background: #2d6a4f; color: #fff;
+    padding: 18px 20px 16px;
+  }
+  header h1 { font-size: 20px; font-weight: 700; }
+  header p.sub { font-size: 12px; opacity: .8; margin-top: 2px; }
+  #stats {
+    display: flex; gap: 10px; margin-top: 12px; flex-wrap: wrap;
+  }
+  .stat {
+    background: rgba(255,255,255,.15); border-radius: 10px;
+    padding: 8px 12px; min-width: 84px;
+  }
+  .stat .num { font-size: 18px; font-weight: 700; line-height: 1; }
+  .stat .lbl { font-size: 10px; opacity: .8; margin-top: 3px; text-transform: uppercase; letter-spacing: .4px; }
+
+  #map { height: 42vh; min-height: 260px; width: 100%; }
+
+  main { max-width: 720px; margin: 0 auto; padding: 18px 16px 60px; }
+
+  .country-group { margin-bottom: 22px; }
+  .country-title {
+    font-size: 13px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .5px; color: #2d6a4f; margin-bottom: 8px;
+    display: flex; align-items: center; gap: 6px;
+  }
+
+  .card {
+    background: #fff; border-radius: 12px; padding: 14px 16px;
+    box-shadow: 0 1px 3px rgba(0,0,0,.08);
+    margin-bottom: 10px; scroll-margin-top: 12px;
+    border-left: 4px solid #e0e0e0;
+    transition: border-color .3s, box-shadow .3s;
+  }
+  .card.highlight { border-left-color: #2d6a4f; box-shadow: 0 0 0 2px rgba(45,106,79,.25); }
+  .card-top { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+  .card-name { font-size: 15px; font-weight: 600; }
+  .card-nights {
+    font-size: 11px; font-weight: 700; color: #2d6a4f; background: #e8f3ee;
+    border-radius: 20px; padding: 2px 9px; white-space: nowrap;
+  }
+  .card-nights.todo { color: #b06a00; background: #fdf1de; }
+  .card-nights.notvisited { color: #888; background: #ececec; }
+  .card.notvisited { opacity: .7; }
+  .card-dates { font-size: 12px; color: #888; margin-top: 2px; }
+  .card-notes { font-size: 13px; color: #444; margin-top: 6px; line-height: 1.4; }
+  .card-notes.empty { color: #bbb; font-style: italic; }
+  .card-links { margin-top: 8px; display: flex; gap: 12px; flex-wrap: wrap; }
+  .card-links a { font-size: 11px; color: #2d6a4f; text-decoration: none; font-weight: 600; }
+  .card-links a:hover { text-decoration: underline; }
+  .card-meta { font-size: 11px; color: #999; margin-top: 4px; }
+
+  #addbox {
+    background: #fff; border-radius: 12px; padding: 16px; margin-top: 30px;
+    border: 1px dashed #cfcac0;
+  }
+  #addbox h2 { font-size: 14px; margin-bottom: 4px; }
+  #addbox p.hint { font-size: 12px; color: #888; margin-bottom: 12px; }
+  #addbox .row { display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+  #addbox input, #addbox textarea {
+    flex: 1; min-width: 120px; padding: 8px 10px; border: 1px solid #ddd;
+    border-radius: 7px; font-size: 13px; font-family: inherit;
+  }
+  #addbox textarea { width: 100%; min-height: 50px; resize: vertical; }
+  #addbox button {
+    background: #2d6a4f; color: #fff; border: none; border-radius: 7px;
+    padding: 9px 16px; font-size: 13px; font-weight: 600; cursor: pointer;
+  }
+  #addbox button:hover { background: #1b4332; }
+  #addbox-out {
+    margin-top: 10px; background: #1b1b1b; color: #d4f4dd; font-size: 11px;
+    padding: 10px 12px; border-radius: 7px; white-space: pre-wrap; word-break: break-all;
+    display: none; font-family: ui-monospace, SFMono-Regular, monospace;
+  }
+  #addbox-copied { font-size: 11px; color: #2d6a4f; margin-left: 8px; display: none; }
+
+  #f-search-btn {
+    background: #2d6a4f; color: #fff; border: none; border-radius: 7px;
+    padding: 0 16px; font-size: 13px; font-weight: 600; cursor: pointer;
+  }
+  #f-search-btn:hover { background: #1b4332; }
+  #f-results { display: flex; flex-direction: column; gap: 4px; margin-bottom: 4px; }
+  .f-result {
+    text-align: left; background: #f6f5f1; border: 1px solid #e5e1d8; border-radius: 7px;
+    padding: 8px 10px; font-size: 12px; cursor: pointer; color: #333;
+  }
+  .f-result:hover { background: #e8f3ee; border-color: #2d6a4f; }
+  .f-result b { color: #2d6a4f; }
+  #f-selected {
+    background: #e8f3ee; border-radius: 7px; padding: 8px 10px; margin-bottom: 10px;
+    font-size: 12px; color: #1b4332; display: flex; justify-content: space-between; align-items: center; gap: 8px;
+  }
+  #f-selected button { background: none; border: none; color: #b06a00; font-size: 11px; cursor: pointer; text-decoration: underline; flex-shrink: 0; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🚐 Náš camping deník</h1>
+  <p class="sub">Kde jsme byli, kdy a na kolik nocí</p>
+  <div id="stats">
+    <div class="stat"><div class="num" id="stat-nights">–</div><div class="lbl">nocí</div></div>
+    <div class="stat"><div class="num" id="stat-places">–</div><div class="lbl">míst</div></div>
+    <div class="stat"><div class="num" id="stat-countries">–</div><div class="lbl">zemí</div></div>
+  </div>
+</header>
+
+<div id="map"></div>
+
+<main>
+  <div id="list"></div>
+
+  <div id="addbox">
+    <h2>+ Přidat nové místo</h2>
+    <p class="hint">Napiš název/adresu místa a vyber ze seznamu — souřadnice se doplní samy.</p>
+    <div class="row">
+      <input id="f-search" placeholder="Např. „Camping Thusis Viamala“…" style="flex:2" />
+      <button id="f-search-btn" type="button">Hledat</button>
+    </div>
+    <div id="f-results"></div>
+    <div id="f-selected" style="display:none"></div>
+
+    <div id="f-rest" style="display:none">
+      <div class="row">
+        <input id="f-name" placeholder="Název místa" />
+        <input id="f-country" placeholder="Země (CH/DE/AT/CZ…)" maxlength="2" style="max-width:110px" />
+      </div>
+      <div class="row">
+        <input id="f-from" placeholder="Datum od (YYYY-MM-DD)" />
+        <input id="f-to" placeholder="Datum do (YYYY-MM-DD)" />
+        <input id="f-nights" placeholder="Počet nocí" style="max-width:110px" />
+      </div>
+      <div class="row">
+        <textarea id="f-notes" placeholder="Poznámka…"></textarea>
+      </div>
+      <button id="f-generate">Vygenerovat</button>
+      <span id="addbox-copied">✓ Zkopírováno do schránky</span>
+      <div id="addbox-out"></div>
+    </div>
+  </div>
+</main>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+const SHARED_DATA_URL = "https://vitekmaca.github.io/camping-schweiz/data.json";
+const FLAGS = { CH: "🇨🇭", DE: "🇩🇪", AT: "🇦🇹", CZ: "🇨🇿" };
+const COUNTRY_NAMES = { CH: "Švýcarsko", DE: "Německo", AT: "Rakousko", CZ: "Česko" };
+
+let map, markers = {};
+
+async function init() {
+  const [visits, shared] = await Promise.all([
+    fetch("visits.json").then(r => r.json()),
+    fetch(SHARED_DATA_URL).then(r => r.json()).catch(() => [])
+  ]);
+  const sharedById = Object.fromEntries(shared.map(c => [c.id, c]));
+
+  renderStats(visits);
+  renderMap(visits);
+  renderList(visits, sharedById);
+}
+
+function renderStats(visits) {
+  const totalNights = visits.reduce((s, v) => s + (v.nights || 0), 0);
+  const countries = new Set(visits.map(v => v.country));
+  document.getElementById("stat-nights").textContent = totalNights || "0";
+  document.getElementById("stat-places").textContent = visits.length;
+  document.getElementById("stat-countries").textContent = countries.size;
+}
+
+function renderMap(visits) {
+  map = L.map("map");
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: 18, attribution: "© OpenStreetMap"
+  }).addTo(map);
+
+  function makeIcon(color) {
+    return L.divIcon({
+      className: "", html: `<div style="background:${color};width:14px;height:14px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.4)"></div>`,
+      iconSize: [14, 14], iconAnchor: [7, 14]
+    });
+  }
+  const iconVisited = makeIcon("#2d6a4f");
+  const iconNotVisited = makeIcon("#999");
+
+  const bounds = [];
+  visits.forEach(v => {
+    const icon = v.visited === false ? iconNotVisited : iconVisited;
+    const m = L.marker([v.lat, v.lng], { icon }).addTo(map);
+    m.bindPopup(`<b>${v.name}</b><br>${nightsLabel(v)}<br><a href="#card-${v.id}">zobrazit v deníku ↓</a>`);
+    markers[v.id] = m;
+    bounds.push([v.lat, v.lng]);
+  });
+  if (bounds.length) {
+    map.invalidateSize();
+    map.fitBounds(bounds, { padding: [30, 30] });
+  }
+}
+
+function renderList(visits, sharedById) {
+  const byCountry = {};
+  visits.forEach(v => { (byCountry[v.country] ||= []).push(v); });
+
+  const order = Object.keys(byCountry).sort((a, b) => byCountry[b].length - byCountry[a].length);
+  const list = document.getElementById("list");
+
+  order.forEach(country => {
+    const group = document.createElement("div");
+    group.className = "country-group";
+    const items = byCountry[country].sort((a, b) => (a.dateFrom || "9999") .localeCompare(b.dateFrom || "9999") || a.name.localeCompare(b.name, "cs"));
+    group.innerHTML = `<div class="country-title">${FLAGS[country] || ""} ${COUNTRY_NAMES[country] || country} · ${items.length}</div>`;
+    items.forEach(v => group.appendChild(renderCard(v, sharedById[v.campId])));
+    list.appendChild(group);
+  });
+}
+
+function nightsLabel(v) {
+  if (v.visited === false) return "nenavštíveno";
+  if (v.nights === 0) return "0 nocí (jen návštěva)";
+  if (v.nights == null) return "doplnit noci";
+  return `${v.nights} ${v.nights === 1 ? "noc" : v.nights < 5 ? "noci" : "nocí"}`;
+}
+
+function renderCard(v, shared) {
+  const card = document.createElement("div");
+  card.className = "card" + (v.visited === false ? " notvisited" : "");
+  card.id = `card-${v.id}`;
+
+  const nightsClass = v.visited === false ? "notvisited" : (v.nights == null ? "todo" : "");
+  const nightsHtml = `<span class="card-nights ${nightsClass}">${nightsLabel(v)}</span>`;
+
+  const datesHtml = (v.dateFrom || v.dateTo)
+    ? `<div class="card-dates">${v.dateFrom || "?"} – ${v.dateTo || "?"}</div>`
+    : "";
+
+  const notesHtml = v.notes
+    ? `<div class="card-notes">${escapeHtml(v.notes)}</div>`
+    : `<div class="card-notes empty">Zatím bez poznámky…</div>`;
+
+  const gmapsUrl = `https://www.google.com/maps?q=${v.lat},${v.lng}`;
+  let links = `<a href="${gmapsUrl}" target="_blank" rel="noopener">Google Maps</a>`;
+  let meta = "";
+  if (shared) {
+    if (shared.website) links += ` <a href="${shared.website}" target="_blank" rel="noopener">Web kempu</a>`;
+    const bits = [];
+    if (shared.canton) bits.push(`kanton ${shared.canton}`);
+    if (shared.rating_p4n) bits.push(`★ ${shared.rating_p4n} (p4n)`);
+    if (shared.near_water) bits.push(`u vody: ${shared.near_water}`);
+    if (bits.length) meta = `<div class="card-meta">${bits.join(" · ")}</div>`;
+  }
+
+  card.innerHTML = `
+    <div class="card-top">
+      <div class="card-name">${escapeHtml(v.name)}</div>
+      ${nightsHtml}
+    </div>
+    ${datesHtml}
+    ${notesHtml}
+    <div class="card-links">${links}</div>
+    ${meta}
+  `;
+
+  card.addEventListener("click", () => {
+    const m = markers[v.id];
+    if (m) { map.flyTo(m.getLatLng(), 11); m.openPopup(); }
+  });
+
+  return card;
+}
+
+function escapeHtml(s) {
+  return s.replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
+}
+
+let selectedPlace = null; // { lat, lng, name, countryCode }
+
+document.getElementById("f-search-btn").addEventListener("click", doSearch);
+document.getElementById("f-search").addEventListener("keydown", e => {
+  if (e.key === "Enter") { e.preventDefault(); doSearch(); }
+});
+
+async function doSearch() {
+  const q = document.getElementById("f-search").value.trim();
+  const results = document.getElementById("f-results");
+  if (!q) return;
+  results.innerHTML = `<div class="f-result" style="cursor:default">Hledám…</div>`;
+  try {
+    const url = "https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=6&q=" + encodeURIComponent(q);
+    const res = await fetch(url);
+    const items = await res.json();
+    if (!items.length) {
+      results.innerHTML = `<div class="f-result" style="cursor:default">Nic nenalezeno, zkus jiné hledání…</div>`;
+      return;
+    }
+    results.innerHTML = "";
+    items.forEach(item => {
+      const div = document.createElement("div");
+      div.className = "f-result";
+      const short = item.display_name.split(",").slice(0, 4).join(",");
+      div.innerHTML = `<b>${escapeHtml(short.split(",")[0])}</b><br>${escapeHtml(short)}`;
+      div.addEventListener("click", () => selectPlace(item));
+      results.appendChild(div);
+    });
+  } catch (e) {
+    results.innerHTML = `<div class="f-result" style="cursor:default">Hledání selhalo, zkus to znovu.</div>`;
+  }
+}
+
+function selectPlace(item) {
+  selectedPlace = {
+    lat: parseFloat(item.lat),
+    lng: parseFloat(item.lon),
+    name: item.display_name.split(",")[0],
+    countryCode: (item.address && item.address.country_code) ? item.address.country_code.toUpperCase() : ""
+  };
+  document.getElementById("f-results").innerHTML = "";
+  document.getElementById("f-search").value = "";
+  const sel = document.getElementById("f-selected");
+  sel.style.display = "flex";
+  sel.innerHTML = `<span>📍 ${escapeHtml(selectedPlace.name)}</span><button type="button" id="f-clear">změnit</button>`;
+  document.getElementById("f-clear").addEventListener("click", () => {
+    selectedPlace = null;
+    sel.style.display = "none";
+    document.getElementById("f-rest").style.display = "none";
+  });
+  document.getElementById("f-name").value = selectedPlace.name;
+  document.getElementById("f-country").value = selectedPlace.countryCode;
+  document.getElementById("f-rest").style.display = "block";
+}
+
+document.getElementById("f-generate").addEventListener("click", () => {
+  if (!selectedPlace) { alert("Nejdřív vyhledej a vyber místo nahoře."); return; }
+  const entry = {
+    id: (document.getElementById("f-name").value || "misto").toLowerCase()
+      .normalize("NFD").replace(/[̀-ͯ]/g, "")
+      .replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || "nove-misto",
+    campId: null,
+    name: document.getElementById("f-name").value,
+    lat: selectedPlace.lat,
+    lng: selectedPlace.lng,
+    country: (document.getElementById("f-country").value || "").toUpperCase() || "CH",
+    dateFrom: document.getElementById("f-from").value || null,
+    dateTo: document.getElementById("f-to").value || null,
+    nights: parseInt(document.getElementById("f-nights").value) || null,
+    rating: null,
+    notes: document.getElementById("f-notes").value || ""
+  };
+  const json = JSON.stringify(entry, null, 2);
+  const out = document.getElementById("addbox-out");
+  out.textContent = json + ",";
+  out.style.display = "block";
+  navigator.clipboard?.writeText(json + ",").then(() => {
+    const c = document.getElementById("addbox-copied");
+    c.style.display = "inline";
+    setTimeout(() => c.style.display = "none", 2000);
+  });
+});
+
+init();
+</script>
+</body>
+</html>
